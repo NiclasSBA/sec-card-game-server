@@ -1,9 +1,7 @@
 var mongoClient = require("mongodb").MongoClient;
-var mongoose = require('mongoose');
-var env = process.env.NODE_ENV || 'development';
-var config = require('./config')[env];
-
-
+var mongoose = require("mongoose");
+var env = process.env.NODE_ENV || "development";
+var config = require("./config")[env];
 
 exports = module.exports = function(io) {
   const connections = [];
@@ -13,44 +11,52 @@ exports = module.exports = function(io) {
     console.log("a user connected to the app");
 
     socket.on("join room", function(roomName) {
-      if(!closedRooms.includes(roomName)){
+      if (!closedRooms.includes(roomName)) {
         //this checks if user already joined the room
-        if(!io.sockets.adapter.sids[socket.id][roomName]){
-      socket.join(roomName);
-      io.sockets.in(roomName).emit("message", "Someone joined the room");
-      console.log("someone joined", roomName);
+        if (!io.sockets.adapter.sids[socket.id][roomName]) {
+          socket.join(roomName);
+           var clientList = io.sockets.adapter.rooms[roomName]
+          console.log(clientList.length)
+          if (clientList.length > 1) {
+            
+            io.sockets.in(roomName).emit("message", "Someone joined the room");
+            console.log("someone joined", roomName);
+            console.log("you are not admin of this room")
+            var length = io.nsps["/"].adapter.rooms[roomName].length;
+            console.log("there is now", length, "connected to", roomName);
+          } else {
+           
+           console.log("you are admin of this room")
+           socket.emit("game: set admin");
+           socket.emi
+          }
 
-      var length = io.nsps["/"].adapter.rooms[roomName].length;
-      console.log("there is now", length, "connected to", roomName);
-      
+          //Updating messages
 
-      //Updating messages
-      
-  mongoose.connect(
-    config.database.url,
-    { useNewUrlParser: true },
-    (err, db) => {
-      var collection = db.collection("chat messages");
-      var stream = collection
-        .find()
-        .sort({ _id: -1 })
-        .limit(10)
-        .stream();
-      stream.on("data", function(chat) {
-        socket.emit("chat", chat.content);
-      });
-    }
-  
-  );
-    }}
+          mongoose.connect(
+            config.database.url,
+            { useNewUrlParser: true },
+            (err, db) => {
+              var collection = db.collection("chat messages");
+              var stream = collection
+                .find()
+                .sort({ _id: -1 })
+                .limit(10)
+                .stream();
+              stream.on("data", function(chat) {
+                socket.emit("chat", chat.content);
+              });
+            }
+          );
+        }
+      }
     });
+
     socket.on("message", function(msg, room) {
       socket.broadcast.emit("chat", msg);
-      
- 
-        // socket.emit("chat", msg);
-    
-  
+
+      // socket.emit("chat", msg);
+
       mongoose.connect(
         config.database.url,
         { useNewUrlParser: true },
@@ -74,23 +80,24 @@ exports = module.exports = function(io) {
     });
     socket.on("game: ready to start", function(room) {
       closedRooms.push(room);
-      console.log(room + "is now closed")
+      console.log(room + "is now closed");
     });
 
     socket.on("game:deal cards", function(cards) {
-      var players = Object.keys(io.sockets.sockets)
-      var amountOfCards =  cards.length / players.length
-      for (var i = 0; i < players.length + 1 ; i++) {
-  
+      var players = Object.keys(io.sockets.sockets);
+      var amountOfCards = cards.length / players.length;
+      for (var i = 0; i < players.length + 1; i++) {
         var dealtCards = cards.splice(0, amountOfCards);
-          if(players[i] !== socket.id){
-        socket.broadcast.to(players[i]).emit("game: dealing cards", dealtCards )}else{
-          socket.emit("game: dealing cards", dealtCards )
-          socket.emit("game: ready to start", "ready" )
+        if (players[i] !== socket.id) {
+          socket.broadcast
+            .to(players[i])
+            .emit("game: dealing cards", dealtCards);
+        } else {
+          socket.emit("game: dealing cards", dealtCards);
+          // socket.emit("game: ready to start", "ready");
         }
-      
-     };
-      console.log(amountOfCards)      
+      }
+      console.log(amountOfCards);
     });
     socket.on("leave room", function(roomName) {
       //it will be true if is the socket is in room and undefined if it is not
@@ -112,6 +119,5 @@ exports = module.exports = function(io) {
       console.log("received error from socket:", socket.id);
       console.log(err);
     });
-   
   });
 };
