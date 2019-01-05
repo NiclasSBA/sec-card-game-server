@@ -14,36 +14,34 @@ exports = module.exports = function(io) {
     connections.push(socket);
     console.log("a user connected to the app");
 
-    socket.on('add nickname', (username)=>{
+    socket.on("add nickname", username => {
       // if(addedUser) return;
-      if(username != socket.username){
-      // console.log(username)
-      // io.sockets.in(gameId).emit("message", "A player changed name");
-      // console.log(clientList)
-      
-      socket.username = username;
-      // console.log(socket)
+      if (username != socket.username) {
+        // console.log(username)
+        // io.sockets.in(gameId).emit("message", "A player changed name");
+        // console.log(clientList)
+
+        socket.username = username;
+        // console.log(socket)
       }
       // addedUser = true;
-    })
-    socket.on('create game room', function(){
-     
+    });
+    socket.on("create game room", function() {
       const id = crypto.randomBytes(16).toString("hex");
-      console.log(id)
+      console.log(id);
       socket.emit("created game room", id);
-    })
+    });
     socket.on("join room", function(roomName) {
       if (!closedRooms.includes(roomName)) {
         //this checks if user already joined the room
         if (!io.sockets.adapter.sids[socket.id][roomName]) {
           socket.join(roomName);
-          
-          var clientList = io.sockets.adapter.rooms[roomName]
+
+          var clientList = io.sockets.adapter.rooms[roomName];
           // console.log(clientList.length)
           if (clientList.length > 1) {
-            if(socket.username){
-              
-            // io.sockets.in(roomName).emit('user joined room', socket);
+            if (socket.username) {
+              // io.sockets.in(roomName).emit('user joined room', socket);
             }
             io.sockets.in(roomName).emit("message", "Someone joined the room");
             // console.log("someone joined", roomName);
@@ -51,35 +49,70 @@ exports = module.exports = function(io) {
             var length = io.nsps["/"].adapter.rooms[roomName].length;
             console.log("there is now", length, "connected to", roomName);
           } else {
-            
-            console.log("you are admin of this room")
+            console.log("you are admin of this room");
             socket.emit("game: set admin");
             // io.in(roomName).emit('user joined room', socket.username);
             //  socket.emi
           }
+          var prevUsers = io.nsps["/"].adapter.rooms[roomName];
           // Here i tell all(including sender) sockets connected to room, that a player connected
-          io.in(roomName).emit('user joined room', socket.username);
+          io.in(roomName).emit("user joined room", socket.username, prevUsers);
           //Updating messages
 
-          mongoose.connect(
-            config.database.url,
-            { useNewUrlParser: true },
-            (err, db) => {
-              var collection = db.collection("chat messages");
-              var stream = collection
-                .find()
-                .sort({ _id: -1 })
-                .limit(10)
-                .stream();
-              stream.on("data", function(chat) {
-                socket.emit("chat", chat.content);
-              });
-            }
-          );
+          // mongoose.connect(
+          //   config.database.url,
+          //   { useNewUrlParser: true },
+          //   (err, db) => {
+          //     var collection = db.collection("chat messages");
+          //     var stream = collection
+          //       .find()
+          //       .sort({ _id: -1 })
+          //       .limit(10)
+          //       .stream();
+          //     stream.on("data", function(chat) {
+          //       socket.emit("chat", chat.content);
+          //     });
+          //   }
+          // );
         }
       }
     });
 
+    socket.on("game: give points", function(game) {
+      var prevUsers = io.nsps["/"].adapter.rooms[game.gameId];
+      //  console.log("trying to give points to", game.currentPlayer);
+      io.in(game.gameId).emit("game: giving points", game.currentPlayer);
+      // socket.broadcast.emit("game: giving points",prevUsers);
+    });
+    socket.on("game: play card", function(game) {
+
+      io.in(game.gameId).emit("game: playing card", game);
+    });
+    socket.on("game: move to next user", function(game) {
+      //  arguments is a variable that finds all arguments passed to a function
+      // console.log("trying to move current user", arguments);
+      var gameId = game.gameId;
+      var userId = game.currentPlayer.id;
+
+      var players = game.players;
+
+      game.players.map((user, index) => {
+        if (game.currentPlayer.id === user.id) {
+          // console.log("found a player", index, players.length)
+          if (index +1 === players.length) {
+            // console.log(user);
+            io.in(gameId).emit(
+              "game: moving to next user",
+              players[0]
+            );
+          } else {
+            var user2 = players[index +1];
+            io.in(gameId).emit("game: moving to next user", user2);
+          }
+        } 
+      });
+      // io.in(gameId).emit("game: moving to next user",player);
+    });
     socket.on("message", function(msg, room) {
       socket.broadcast.emit("chat", msg);
 
@@ -112,13 +145,11 @@ exports = module.exports = function(io) {
     });
 
     socket.on("game:deal cards", function(cards, gameId) {
-      console.log(gameId)
-        // if(gameId){
-       var players = Object.keys(io.sockets.adapter.rooms[gameId]["sockets"]);
-       console.log(players)
-       
-      
-      
+      console.log(gameId);
+      // if(gameId){
+      var players = Object.keys(io.sockets.adapter.rooms[gameId]["sockets"]);
+      console.log(players);
+
       var amountOfCards = cards.length / players.length;
       for (var i = 0; i < players.length + 1; i++) {
         var dealtCards = cards.splice(0, amountOfCards);
@@ -128,17 +159,16 @@ exports = module.exports = function(io) {
             .emit("game: dealing cards", dealtCards);
         } else {
           socket.emit("game: dealing cards", dealtCards);
-          socket.emit("game: ready to start", gameId);
         }
+        socket.emit("game: ready to start", gameId);
       }
-      // console.log(amountOfCards);
-     
-    
+      // console.log(amountOfCards)
     });
-    socket.on("game: start game", function(gameId){
+    socket.on("game: start game", function(game) {
+
       //We want to inform all players that the game is started
-      io.in(gameId).emit('game: game is started');
-    })
+      io.in(game.gameId).emit("game: game is started", game);
+    });
     socket.on("leave room", function(roomName) {
       //it will be true if is the socket is in room and undefined if it is not
       if (io.sockets.adapter.sids[socket.id][roomName]) {
